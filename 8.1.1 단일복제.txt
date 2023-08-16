@@ -1,0 +1,187 @@
+
+가장 간단한 복제 구조인 마스터, 단일 슬레이브 구조를 직접 실행하고 테스트해보자
+
+단일 복제 구조는 가장 기본적인 클러스터 구성으로 마스터 노드 하나와 슬레이브 노드 하나로 구성된다.
+
+마스터 노드에 변경이 발생하면 실시간으로 슬레이브 노드에 데이터 변경사항이 기록된다.
+
+하지만 슬레이브 노드에 데이터 변경이 발생하면 마스터 노드는 해당 변경사항을 감지 못한다.
+
+슬레이브 노드에서 데이터 변경이 일어나는 순간 데이터 정합성이 무너지게 되므로 슬레이브 노드에서는 데이터의 변경을
+
+수행하지 않아야 한다.
+
+단일 복제 클러스터를 구성하기 위해서 두 개의 인스턴스를 실행하고 마스터와 슬레이브를 설정하는 과정에 
+
+대해서 알아보자.
+
+[그림 8-1]은 데이터 10개가 저장된 레디스 클러스터에서 쓰기와 읽기 연산을 처리하는 위치를 보여준다.
+
+
+[레디스 클러스터]
+
+마스터 노드 ->(복제데이터) <-(복제요청) 슬레이브 노드
+
+클라이언트는 -> 마스터 노드에 쓰기 연산을 진행
+클라이언트는 <- 읽기 연산을 진행
+
+
+위에서 알수 있듯이 마스터 노드와 슬레이브 노드에 각각 쓰기 연산과 읽기 연산을 분할하여 호출
+
+이것은 클라이언트 애플리케이션 레벨에서 각각 마스터 노드와 슬레이브 노드를 인지하고 있어야 한다는 의미
+
+결과적으로 애플리케이션 복잡도가 증가하게 된다.
+
+만약 슬레이브 노드에 쓰기 연산을 수행하면 데이터는 정상적으로 기록되지만 마스터 노드와 슬레이브 노드 간의 
+
+데이터 불일치가 발생한다.
+
+상황에 따라서 슬레이브 노드에 기록한 데이터를 잃어 버릴 수 있다.
+
+이와 관련한 내용은 10장의 '스냅샷'에서 자세히 다룬다.
+
+[그림 8-2]는 복제가 구성된 클러스터에 쓰기 연산이 발생했을때 클러스터가 데이터를 동기화하는 방법을 설명
+하고있다.
+
+[레디스 클러스터]
+
+마스터 노드 ->(데이터 복제, set key1 'test value') 슬레이브 노드
+
+클라이언트 -> (set key1 'test value') -> 마스터 노드
+
+레디스 클러스터는 마스터와 슬레이브 노드의 데이터 동기화를 위하여 마스터 노드가 받은 쓰기 연산 명령을 슬레이브
+
+노드로 전달한다.
+
+set 명령을 수신한 마스터 노드는 자신의 노드에 데이터를 기록하고 슬레이브 노드에 수신한 명령을 그대로 전달한다.
+
+슬레이브는 수신된 명령을 수행하게 되고 마스터와 슬레이브의 데이터 동기화가 이루어진다.
+
+위와 같은 클러스터를 CentOS에 구축해보자.
+
+두 개의 레디스 인스턴스를 실행하려면 준비 작업이 필요하다. 
+마스터 노드와 슬레이브 노드 각각 6300, 6301 포트에서 동작하도록 설정한다.
+
+또한 스냅샷 파일의 이름도 포트와 동일하게 설정한다.
+
+이때 스냅샷 파일의 이름을 포트 이름과 동일하게 설정하는 것은 관리상 편의성을 위한 것이다.
+
+
+도커를 활용한 centos:7에서 레디스 설치
+
+FROM centos:7
+
+ENV container docker
+
+RUN yum -y update; yum clean all
+RUN yum -y install systemd; yum clean all; \
+(cd /lib/systemd/system/sysinit.target.wants/; for i in *; do [ $i == systemd-tmpfiles-setup.service ] || rm -f $i; done); \
+rm -f /lib/systemd/system/multi-user.target.wants/*;\
+rm -f /etc/systemd/system/*.wants/*;\
+rm -f /lib/systemd/system/local-fs.target.wants/*; \
+rm -f /lib/systemd/system/sockets.target.wants/*udev*; \
+rm -f /lib/systemd/system/sockets.target.wants/*initctl*; \
+rm -f /lib/systemd/system/basic.target.wants/*;\
+rm -f /lib/systemd/system/anaconda.target.wants/*;
+
+VOLUME ["/sys/fs/cgroup"]
+CMD ["/usr/sbin/init"]
+
+
+// 
+docker build --rm -t centos7-systemd .
+
+//
+docker run --privileged --name centos_demo -p 80:80 -itd -e container=docker -v /sys/fs/cgroup:/sys/fs/cgroup centos7-systemd /usr/sbin/init
+
+출처:
+https://this-programmer.tistory.com/116
+
+centos:7에서 redis 설치하는 구문은 bard나 chat-gpt에서 가지고오면됨
+
+
+master.conf
+# redis configuration
+port 6300
+dbfilename 6300.rdb
+
+slave.conf
+# redis configuration
+port 6301
+dbfilename 6301.rdb
+slaveof 127.0.0.1 6300
+slave-read-only no
+
+
+커맨드
+$ ./src/redis-server ./master.conf >> master.log &
+
+
+마스터 노드로 사용할 레디스 인스턴스를 백그라운드로 시작하고 로고를 master.log 파일에 기록한다.
+
+마스터 노드의 복제 상태를 확인하기 위해서 레디스 명령행 클라이언트를 실행하고 info 명령을 실행하자.
+
+$ redis-cli -p 6300
+
+redis 127.0.0.1:6300> info replication
+# Replication
+role:master
+connected_slaves:0
+...
+
+6300에 동작중인 마스터 노드에 접속하기 위해 -p 옵션을 사용했다.
+
+info replication 
+접속된 노드의 복제 정보를 출련한다. 접속된 노드는 6300 포트에서 동작 중이며,
+마스터 노드로 동작하고 있다. 또한 연결된 슬레이브 노드는 없다.
+복제 상태 정보를 확인 하기 위해서 슬레이브 노드를 시작하자.
+
+
+$ ./src/redis-server ./slave.conf >> slave.log &
+
+슬레이브 노드로 사용할 레디스 인스턴스를 시작한다. 
+
+# Replication
+role:master
+connected_slaves:1
+
+연결된 슬레이브 노드의 개수가 1로 바뀌었으며 출력된 정보의 맨 마지막 줄에 연결된 슬레이브 노드의 정보가 추가됐다.
+이번에는 슬레이브 노드의 복제 상태를 확인하자
+
+[root@7582824abede home]# redis-cli -p 6301
+127.0.0.1:6301> info replication
+# Replication
+role:slave #1
+master_host:127.0.0.1 #2
+master_port:6300 #3
+master_link_status:up #4
+master_last_io_seconds_ago:5 #5
+master_sync_in_progress:0 #6
+
+
+1. 롤을 출력
+2. 마스터 노드 호스트 정보 출력
+3. 마스터 노드의 포트 정보 출력
+4. 마스터 노드와의 연결 상태를 출력
+5. 마스터 노드에서 마지막으로 슬레이브 노드에 데이터를 전송한 이후의 경과 시간을 출력.
+즉, 마지막으로 명령을 수신한 시간을 출력한다.
+6. 해당 노드가 현재 마스터 노드와 데이터 동기화 중인지 여부를 출력한다.
+
+
+복제 테스트를 위한 테스트 케이스 [예제 8-11]은 10만 개의 키를 마스터 노드에 기록하고 슬레이브 노드에서 
+데이터를 읽어서 두 값을 비교한다. 만약 두데이터가 동일하다면 테스트가 정상이다. 즉 동기화가 실시간으로
+이루어진다고 할 수 있다.
+
+1000건을 테스트 진행하였으나 보통 같은 경우는 에러를 발생시킨다.
+
+마스터 노드와 슬레이브 노드간에 대이터가 복제가 완료되기 전에 슬레이브 노드에서 데이터를 조회했기 때문이다.
+
+즉, 슬레이브 노드에 해당 키에 대한 값이 존재 하지 않기 때문에 오류가 발생한다.
+
+테스트 케이스를 1000건 이상으로 설정해야 한다.
+
+
+
+
+
+

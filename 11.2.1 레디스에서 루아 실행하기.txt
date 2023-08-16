@@ -1,0 +1,40 @@
+
+
+레디스에서 루아 스크립트를 실행하는 방법은 두가지이다.
+하나는 eval 명령을 사용하여 수행하고자 하는 루아 스크립트를 매번 레디스로 전송하는 것이다.
+수행 이후 에는 스크립트가 버려지기 때문에 재실행을 위해서는 동일한 스크립트를
+다시 전송해야 한다.
+
+두 번째 방법은 script load 명령을 사용하여 해당 스크립트에 대한 sha1 문자열을 생성한다.
+
+생성된 sha1 문자열은 evalsha 명령으로 실행 할 수 있기 때문에 동일한 스크립트를 다시 전송할 필요가 없다.
+
+1. eval 을 사용하는 예제
+
+eval "local sum = ARGV[1] + ARGV[2] local result = redis.call('set', KEYS[1], sum) return result" 1 test:key 320 240
+
+1 test:key 320 240
+사용하는 키 인자가 하나이므로 1
+test:key가 KEYS[1] 랑 매핑된다.
+320, 240 은 각각 ARGV[1] ARGV[2] 로 매핑된다.
+
+2. evalsha를 사용하는 예제
+
+script load "local sum = ARGV[1] + ARGV[2] local result = redis.call('set', KEYS[1], sum) return result"
+
+evalsha 65d3571d5642a15da3c5c4c36ec217b9cb1cdc92 1 test:key 640 480
+
+레디스 서버에서 실행되는 루아 스크립트는 원자성을 가진다.
+이 원자성은 프로그램 관점에서는 매우 유용하지만 레디스 서버의 관점에서는 독이 될 수 있다.
+루아 스크립트가 동작하는 동안에는 다른 요청을 실행하지 못하는 상황이 발생하기 때문이다.
+
+$ eval "while true do if true then local a = 0 end end" 0
+
+$ info
+BUSY Redis is busy running a script. You can only call SCRIPT KILL or SHUTDOWN NOSAVE.
+
+script kill 명령 또는 shutdown nosave 명령을 수행하기 전까지 계속 수행된다. 
+
+eval "while true do if true then local a = 0 end end" 0
+
+

@@ -1,0 +1,102 @@
+셋 중복을 허용하지 않는 집합 형태의 자료구조
+정렬되어 있지 않다.
+
+셋 데이터에는 2^32-1 값을 저장할 수 있다.
+값이 저장될 때 중복에 대한 확인이 일어나므로 nx 접미사의 명령이 필요하지 않다.
+
+셋의 집합 연산 명령은 합집합(sunion), 교집합(sinter), 차집합(diff) 이다.
+
+트위터의 팔로잉(Following) 구조를 예로 들어 보자. 
+
+팔로잉 구조는 단방향 친구 맺기로 볼 수 있다.
+A > B일때 A가 B를 팔로잉 B는 A에게 팔로워 이다.
+B가 A를 팔로우 하면 서로 팔로우 관계가 형성된다.
+
+sinter
+시간복잡도: O(N)
+N은 가장 적은 수의 요소를 가진 셋에 저장된 요소 수
+
+
+127.0.0.1:6379> sadd user:1:follows 2
+(integer) 1
+127.0.0.1:6379> sadd user:2:followers 1
+(integer) 1
+127.0.0.1:6379> sadd user:3:follows 1
+(integer) 1
+127.0.0.1:6379> sadd user:1:followers 3
+(integer) 1
+127.0.0.1:6379> sadd user:1:follows 3
+(integer) 1
+127.0.0.1:6379> sadd user:3:followers 1
+(integer) 1
+127.0.0.1:6379> sadd user:2:follows 3
+(integer) 1
+127.0.0.1:6379> sadd user:3:followers 2
+(integer) 1
+127.0.0.1:6379> sinter user:1:follows user:1:followers
+1) "3"
+
+// sinter 를 통해서 두개 속하는 집합에 교집합을 구할 수 있다.
+
+NoSQL은 데이터 간의 관계를 저장하는 기능을 지원하지 않는다.
+이 같은 방법을 사용하여 관계의 저장이 가능하다. 시스템에 따라서 다르지만 평균적으로 수백개 정도의
+요소를 가진 셋 데이터에 대한 집합 연산은 시스템에 큰 부하를 주지 않는다.
+
+이런 방법은 반드시 필요한 경우에만 사용하도록 한다. 
+
+셋 데이터의 집합 연산은 명령 수행 비용이 매우 비싼 편에 속한다. 즉, 셋 데이터의 집합 연산이
+많아지면 자연스레 레디스의 전체적인 성능도 저하된다. 그러므로 집한 연산은 반드시 필요한 상황에서만
+사용하도록 하자.
+
+집합 요소 조회
+
+scard
+주어진 키에 저장된 요소들의 개수를 돌려준다.
+시간복잡도: O(1)
+
+srem
+주어진 키에 저장된 요소를 제거하고 제거된 요소의 개수를 돌려준다.
+시간복잡도: O(1)
+
+spop
+주어진 키에 저장된 요소 중에서 임의의 요소를 제거하고 제거된 요소를 돌려준다.
+시간복잡도: O(1)
+
+sismember
+명령은 주어진 키에 저장되어 있는지 검사한다.
+시간복잡도: O(1)
+
+smove
+원본키에 저장된 요소를 대상키로 이동하고 이동 결과를 돌려준다.
+시간복잡도: O(1)
+
+
+127.0.0.1:6379> sadd user:1:friends Scott Sean Simon Hal Hank
+(integer) 5
+127.0.0.1:6379> sismember user:1:friends Sean
+(integer) 1
+127.0.0.1:6379> smove user:1:friends user:2:friends Scott
+(integer) 1
+
+user:1:friends 에 Scott 항목이 없더라도 user:2:friends 항목에 추가한다.
+
+127.0.0.1:6379> sismember user:1:friends Scott
+(integer) 0
+127.0.0.1:6379> smembers "user:1:friends"
+1) "Hank"
+2) "Sean"
+3) "Simon"
+4) "Hal"
+127.0.0.1:6379> smembers "user:2:friends"
+1) "Scott"
+127.0.0.1:6379> srem user:1:friends Hank
+(integer) 1
+127.0.0.1:6379> spop user:1:friends
+"Sean"
+127.0.0.1:6379> srem user:1:friends Hank
+(integer) 1
+127.0.0.1:6379> spop user:1:friends
+"Sean"
+
+spop 함수는 무작위로 값을 제거하여서 실질적으로 활용을 안함
+사용예시로 무작위로 값을 큐형태로 가지오 올때 사용되어지는 케이스는 있음

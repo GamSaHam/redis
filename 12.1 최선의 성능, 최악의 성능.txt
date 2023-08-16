@@ -1,0 +1,95 @@
+
+컴퓨터 수리를 맡기면서 언제까지 고칠수 있나는 질문에
+빠르면 내일까지 처리됩니다. 늦어도 내일까지 처리됩니다. 
+답변 중 전자 빅 오메가 표기법, 후자 빅오 표기법에 해당 한다.
+
+12.2 측정 방법
+컴퓨터 공학에서 프로그램의 시간 복잡도를 측정하는 방법은 연산의 횟수를 기준으로 한다.
+
+boolean isNull(String data) {
+    
+    if(data == null) {
+        return true;
+    }else {
+        return false;
+    }
+
+}
+
+위 함수는 어떠한 크기의 데이터가 입력되더라도 단 한 번의 비교 명령만으로 처리가
+완료 된다.
+isNull 함수의 시간 복잡도는 f(1) 로 표기하면 빅오 표기법은 O(1) 이다.
+즉, 위 함수의 시간 복잡도는 O(1) 이다.
+
+
+int getSum(int max) {
+    int data = 0;
+   
+    for (int i =1;i <= 100; i++) {
+        data = data + 1;
+        if(data > max) {
+            return data;
+        }
+    }
+
+}
+
+int sumOfArray(String[] data) {
+    int sum = 0;
+
+    for(int i =0;i<data.length;i++) { // 1
+        data[i] = data[i] + 2; // 2
+    }
+
+    for(int j =0;j<data.length;j++) { // 3
+        data[j] = sum + data[j]; // 4
+    }
+
+    return sum;
+}
+
+
+// 1과 2과 각 100회식 실행되고 3과 4가 100회식 실행되어 총 400회가 실행된다.
+
+시간 복잡도 함수로 표현하면 (2n + 2n)이 되고 빅 오 표기법으로는 O(4N)이 되는데 상수를 1로 표기하는 조건의
+의하여 O(N)
+
+int sumNested(String[] data) {
+    int sum = 0;
+
+    for(int i=0;i<data.length;i++) { // 1
+        for(int j=0;j<data.length;j++) { // 2
+            sum = sum + data[i] / 2; // 3
+        }
+
+    }
+
+    return sum;
+}
+
+// data 의 키그가 100일 때 1일때 100회 실행되고 2와 3은 각 100회 실행되므로 
+// 연산이 총 2000회 수행된다. 시간 복잡도는 f(2N^2)으로 표현되며 빅 오 표기법으로는 O(N^2) 이다.
+
+// 이와 같은 방법으로 삼중 중첩 for 문은 O(N^3)과 같이 표시한다.
+
+이진 탐색(Binary Search) 
+
+빅 오메가 표기법: 오메가 기호 (1)
+빅 세타 표기법: 빅세타 기호(log N)
+빅오 표기법: O(log N)
+
+성능상 O(1)이 가장 좋은 알고리즘이지만 대부분 O(1)의 성능은 특별한 때에만 해당하므로 차선책인 O(log N)
+인 알고리즘을 선택한다.
+
+
+
+
+
+
+
+
+
+
+
+
+

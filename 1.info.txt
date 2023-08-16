@@ -1,0 +1,161 @@
+redis_version: 실행 중인 레디스 서버의 버전 정보
+arch_bits: 실행 중인 레디스 서버의 아키텍처 비트
+process_id: 실행 중인 레디스 서버의 시스템 프로세스 ID
+connected_clients: 현재 연결되어 있는 클라이언트의 커넥션 수
+connected_slaves: 복제를 위해서 연결되는 슬레이브 노드 수
+used_memory: 레디스 서버가 사용하는 메모리의 양(바이트 단위)
+used_memory_human: used_memory를 사람이 읽기 쉽도록 메가바이트 또는 기가바이트 단위로 표현
+used_memory_peak: 레디스 서버가 최대로 사용했던 메모리 크기(바이트 단위)
+role:master: 마스터-슬레이브 복제 모드에서 동작하는 모드, 단일모드로 동작할 떄도 마스터로 표시된다.
+
+
+set user:name "david"
+set user:name "kris"
+
+append user:name "jeong"
+
+get user:name
+
+----
+
+set login:counter "0"
+incr login:counter 
+
+decr login:counter
+
+--- 
+응답값은 , 상태응답, 에러응답, 숫자응답, 단일 벌크응답, 멀티 벌크 응답값은
+
+
+--- 리스트 명령
+--- 논리적 링크드 리스트 구현.
+--- 링크드 리스트를 통해 O(n) 으로 자료를 처리한다.
+lpush my:list:recommand java
+lpush my:list:recommand javascript
+lpush my:list:recommand eclipse redis "eclipse plugin"
+lrange my:list:recommand 0 -1 // -1: 마지막자리, -2마지막지라다음
+
+
+--- 셋 명령
+--- 셋을 다루는 명령의 집합, 레디스의 셋 데이터는 순서가 보장되지 않으며
+--- 중복을 허용되지 않는 컬렉션이다.
+--- 수학적 용어로 집합
+sadd my:test:set my
+sadd my:test:set name
+sadd my:test:set is
+sadd my:test:set kris
+smembers my:test:set
+
+--- zadd
+--- O(log(N))
+--- <숫자응답>, 성공이면 입력된 값의 개수, 이미 존재하는 값이면 0
+
+--- zrange
+--- O(log(N))
+--- <멀티 벌크응답>, 조회된 값 목록, 값이 존재하지 않을 떄 nil
+
+zadd user:ranking 1 kris
+zadd user:ranking 2 anna
+zadd user:ranking 3 james
+zadd user:ranking 4 jina
+zrange user:ranking 0 -1
+
+zrange user:ranking 0 -1 withscores
+
+--- hset
+--- 해시 명령
+--- 시간 복잡도 O(1)
+--- 응답 <숫자응답>, 존재하지 않은 필드 1, 존재하는 필드일 때0
+
+--- hget
+--- 시간복잡도 O(1)
+--- <벌크응답>, 지정된 필드가 존재할 때 저장된 값, 아니면 nil
+
+--- hgetall 키
+--- O(N), N은 지정된 필드 수
+--- <멀티 벌크응답>, 지정된 키에 저장된 모든 필드와 값의 목록
+
+hset user:1 name kris
+hset user:1 lastname jeong
+hset user:1 location "Gangnam Blgd., Gangnam-gu, Seoul, Korea"
+hget user:1 lastname
+
+hgetall user:1
+
+-- 콘솔창에서
+redis-benchmark
+
+====== PING_BULK ======
+100000 request completed in 1.11 seconds // 10만개의 처리를 1.11 초진행
+50 parallel clients // 50개의 클라이언트 동시 접속
+3 bytes payload // 저장 데이터의 크기 3바이트
+keep alive // 클라이언트의 연결 유지 상태 정보
+
+92.96% <= 1 milliseconds
+100.00% <= 1 milliseconds
+90497.73 requests per second // 초당 처리된 명령어 수
+
+redis-benchmark -d 50 -q -t get,set,lpush,lpop,sadd,spop
+// 50바이트 1데이터를 문자열, 리스트, 셋, 데이터형으로 저장하고 읽어 읽어 내는 데 걸리는 시간 측정 결과를 진행률
+// 을 제외 하고 출력하는 명령과 그 결과다.
+SET: 76219.51 requests per second
+GET: 86956.52 requests per second
+LPUSH: 78864.35 requests per second
+LPOP: 80321.28 requests per second
+SADD: 73206.44 requests per second
+SPOP: 83263.95 requests per second
+
+// 1024바이트로 요청을 해도 시간이 얼마 차이가 나지 않는다.
+
+== 100만개의 키를 데이터로 추가하는 테스트 명령어는 다음과 같다.
+redis-benchmark -t set -n 1000000 -r 100000000
+
+====== SET ======
+1000000 requests completed in 13.68 seconds
+50 parallel clients
+3 bytes payload
+keep alive: 1
+
+90.13% <= 1 milliseconds
+99.76% <= 2 milliseconds
+99.97% <= 3 milliseconds
+99.99% <= 4 milliseconds
+99.99% <= 5 milliseconds
+99.99% <= 6 milliseconds
+100.00% <= 9 milliseconds
+100.00% <= 11 milliseconds
+100.00% <= 12 milliseconds
+100.00% <= 13 milliseconds
+100.00% <= 13 milliseconds
+73115.45 requests per second
+
+// -r 테스트의 사용할 랜덤 키의 개수
+
+redis-cli info cpu
+redis-cli info keyspace
+redis-cli info stats
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

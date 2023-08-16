@@ -1,0 +1,92 @@
+이번 장에서는 레디스의 데이터 저장방법과 조회 방법, 클라이언트의 요청 처리 방법에 대해
+알아보고자 C언어로 된 레디스의 소스코드를 살펴본다. 세세하게
+설명하지만 C언어를 전혀 모르면 어려울 수도 있다. CentOS에 이클립스 CDT 버전을 설치하면
+레디스 코드를 칸편하게 살펴 볼수 있다.
+
+이 장의 내용
+- 레디스 객채 구조
+- 레디스 인코딩 종류
+- 레디스 문자열
+- 명령어 처리 방법
+
+6.1 레디스 객체
+레디스는 저장된 데이터를 관리하기 위하여 redisObject 객체를 사용한다.
+문자열데이터와 해시 데이터는 모두 redisObject 객체를 사용하여 저장한다.
+redisObject가 관리하는 정보
+ - 저장된 객체의 데이터형과 인코딩 정보
+ - 객체가 참조된 횟수
+ - LRU(Least Recently Used) 시간 정보
+
+ redisObject는 레디스의 거의 모든 소스코드에서 사용되며, 
+ 레디스에 저장된 모든 데이터와 키의 표현에 사용된다.
+ 레디스의 가장 기본적인 데이터 표현 방식이며 레디스의 내부구조를 이해하기 위해서
+ 가장 중요한 객체다. 
+
+typedef struct redisObject {
+    unsigned type:4;
+    unsigned notused:2;
+    unsigned encoding:4;
+    unsigned lru:22;
+    int refcount;
+    void *ptr;
+} robj;
+
+C언어 구조체에서 사용하는 비트 필드 표기 방식으로서 할당된 데이터형을 콜론 기호 뒤의 숫자에 해당하는
+길이 만큼 사용하는 것이다.
+
+32비트의 크기의 변수를 각 4,2,4,22비트 만큼 할당하여 4개의 변수로 사용했다.
+
+redisObject
+31 --- 24, 23 --- 17, 16 --- 8, 7 --- 0 
+
+0비트부터 3비트 type
+4비트부터 5비트 notused
+6비트부터 9비트 encoding
+10비트 부터 31비트 lru
+
+0비트 부터 31 refcount
+0비트 부터 31 *ptr
+
+redisObject 객체의 크기는 96비트(12바이트)다.
+
+set key:sample 'Test String'
+
+debug object key:sample
+책에서 나온 구문은 아래와 같다.
+Value at:00007FCDCA412F00 refcount:2 encoding:raw serializedlength:12 lru:988013 lru_seconds_idle:6
+
+저장된 인코딩 정보 encoding
+객체 잠조 횟수 refcount
+시간에 대한정보 lru
+
+redisObject
+
+type -> 0(REDIS_STRING)
+notused
+encoding -> 0(REDIS_ENCODING_RAW)
+lru -> 988013
+refcount -> 2
+*ptr -> 'Test String'
+
+redis 인코딩 타입 상수 목록
+
+REDIS_ENCODING_RAW: 인코딩되지 않은 바이트 배열 형태의 데이터
+REDIS_ENCODING_INT: 숫자 형태의 데이터. redisObject 저장되는 문자열 데이터가 long 범위일 때
+32비트 운영체제에서는 -2147483647~2147483647 limits.h에 정의된 데이터 크기에 따라 달라진다.
+
+REDIS_ENCODING_HT: 해시 테이블 형태의 데이터를 의미한다.
+REDIS_ENCODING_ZIPMAP: 레디스 2.6버전 미만 인코딩 형태 압축된 해시 테이블 형태의 인코딩
+2.6이상버전에는 REDIS_ENCODING_ZIPLIST 인코딩
+
+REDIS_ENCODING_LINKDLIST: 일반적인 연결 리스트 형태의 인코딩
+REDIS_ENCODING_ZIPLIST: 압축된 형태의 연결 리스트 인코딩, 정렬된 셋 데이터형, 해시데이터형을 저장
+할때 사용되는 인코딩으로써 redis.conf에 지정된 설정값에 따라서 사용됨
+
+REDIS_ENCODING_INTSET: 셋 데이터형에 데이터를 저장할 때 사용하는 특별한 인코딩으로서 데이터가 모두 숫자로
+구성되어 있을 떄 사용. redis.conf 파일에 set-max-inset-entries다.
+
+REDIS_ENCOIND_SKIPLIST: 정렬된 셋 데이터형에 사용되는 기본 인코딩을 의미한다.
+
+
+
+

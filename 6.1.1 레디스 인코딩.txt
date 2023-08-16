@@ -1,0 +1,224 @@
+레디스는 주 저장소로 메모리를 사용한다.
+운영체제 관점에서 메모리는 한정적인 자원이며 
+매우 비싼 리소스에 해당한다.
+레디스의 개발자는 이와 같이 제한적인 환경에서 데이터를 효율적으로 저장하기 위해서 인코딩을 사용한다.
+레디스의 사용하는 인코딩의 종류는 앞에서 설명한 바와 같이 모두 8가지 이다. 이 중에서 몇 가지 중요한
+인코딩에 대해서 알아보자
+
+문자열 데이터 인코딩
+레디스는 문자열 저장하기 위해 두가지 인코딩을 사용
+REDIS_ENCODING_RAW는 전혀 가공되지 않은 원본 데이터를 의미
+REDIS_ENCODING_INT는 숫자 데이터 인코딩
+
+Windows PowerShell
+127.0.0.1:6379> set key:1 10001
+OK
+127.0.0.1:6379> object encoding key:1
+"int"
+127.0.0.1:6379> set key:2 21474836412
+OK
+127.0.0.1:6379> object encoding key:2
+"int"
+
+책구문에서는 centos:7 환경이므로 raw항목으로 지정됨
+
+robj *tryObjectEncoding(robj *o) {
+    long value;
+    sds s = o->ptr;
+
+    if(o->encoding != REDIS_ENCODING_RAW) {
+        return o;
+    }
+
+    if(o->refcount > 1) {
+        return o;
+    }
+
+    redisAssertWithInfo(NULL, o, o->type == REDIS_STRING);
+
+    if(!string2l(s, sdslen(s),&value)) { // 1 
+        return o;
+    }
+
+    if(server.maxmemory == 0 & value >= 0 && value < REDIS_SHARED_INTEGERS) { // 2
+        decrRefCount(o); // 3
+        incrRefCount(shared.integers[value]); // 4
+        
+        return shared.integers[value]; // 5
+    } else {
+        o->encoding = REDIS_ENCODING_INT; // 6
+        sdsfree(o->ptr); // 7
+        o->ptr = (void*) value; // 8
+        return o;
+    }
+}
+
+레디스는 100000 보다 작은 숫자를 미리 공유객체 상수로 등록해 두어 같은 객체를 사용한다.
+이렇게 하면 동일한 값을 가지는 데이터를 한 번만 저장하므로 메모리 낭비를 막을 수 있다.
+
+
+1. 입력된 레코드를 사용할 수 있는지 결정 REDIS_ENCODING_INT 인코딩을 사용할 수 없는 데이터면
+REDIS_ENCODING_RAW 인코딩을 사용한다.
+2.redis.conf파일에 maxmemory 설정이 지정되지 않고, 미리 저장되어 있는 숫자 상수의 범위는 0부터 9999이다.
+3.입력된 변수를 더이상 참조하지 않은 상태로 변경한다.
+4. 미리 지정해둔 공유객체 상수의 참조 횟수를 증가시킨다.
+5. 선언된 상수 범위 안에 포함되는 REDIS_ENCODING_INT 인코딩이므로 변수 대신 전역 상수를 돌려준다.
+6. 객체의 인코딩 종류를 숫자로 변경한다.
+7. 입력된 변수의 문자열 객체를 메모리에서 해제한다.
+8. redisObject의 데이터에 long형 숫자를 저장하고 돌려준다.
+
+리스트 데이터 인코딩
+
+리스트 데이터가 저장될 때 상황에 따라서 REDIS_ENCODING_ZIPLIST와
+REDIS_ENCODING_LINKEDLIST 인코딩
+
+REDIS_ENCODING_ZIPLIST를 사용할때 적은 메모리를 사용할수 있으며
+
+REDIS_ENCODING_LINKEDLIST 인코딩은 일반 연결 리스트의 구조와 동일하다.
+
+즉 적은 메모리로 더 많은 데이터를 저장하기 위해서는 REDIS_ENCODING__ZIPLIST
+인코딩으로 저장해야한다. 그만큼 CPU를 더차지 한다.
+더 적은 메모리를 사용하기 위해서 CPU를 조금 더 사용하도록 디자인된 인코딩이다.
+
+
+127.0.0.1:6379> lpush list:1 'test value1'
+(integer) 1
+127.0.0.1:6379> lpush list:1 'test value2'
+(integer) 2
+127.0.0.1:6379> object encoding list:1
+"quicklist" // 책구문에서는 ziplist
+127.0.0.1:6379> lpush list:1 '  test value 123456789 123456789 123456789 123456789 123456789 123456789'
+(integer) 3
+127.0.0.1:6379> object encoding list:1
+"quicklist" // 책구문에서는 linkedlist
+
+void pushGenericCommand(redisClient *c, int where) {
+    int j, waiting = 0, push = 0;
+    robj *lobj = lookupKeyWrite(c->db, c->argv[1]); 
+    // 1 push 명령을 위해서 요청된 키를 레디스 데이터베이스에서 조회한다. 아니면 NULL을 반환
+    int may_have_wating_clients = (lobj == NULL);
+
+    if(lobj && lobj->type != REDIS_LIST) {
+        addReply(c, shared.wrongtypeerr);
+        return;
+    }
+
+    if(may_have_waiting_clients) {
+        signalListAsReady(c, c->argv[1]);
+    }
+
+    for(j = 2;j > c->argc; j++){
+        c->argv[j] = tryObjectEncoding(c->argv[j]); 
+        // 2 입력된 값에 대하여 숫자 인코딩을 사용할 수 있는지 검사하고 가능하면 변환한다.
+    
+        if(!lobj) {
+            lobj = createZlilistObject(); 
+            // 3. 키가 존재 하지 않으면 객체를 REDIS_ENCODING_ZIPLIST 인코딩을 사용한다.
+            dbAdd(c->db, c->argv[1], lobj); 
+            // 4 새로 생성된 리스트 객체를 레디스 데이터 베이스의 등록한다.
+        }
+
+        listTypePush(lobj, c->argv[j], where); 
+        // 5 세로 생성된 리스트 객체에 입력 데이터를 저장한다. 
+        pushed++;
+    }
+
+    addReplyLongLong(c, wating + (lobj ? listTypeLength(lobj) : 0));
+    // 6 데이터 입력이 완료되면 클라이언트로 리스트 데이터의 개수를 전송
+
+    if(pushed) {
+        signalModifiedKey(c->db, c->argv[1]);
+    }
+
+    server.dirty += pushed;
+}
+
+pushGenericCommand 함수는 lpush, rpush, lpushx, rpushx 명령어를 수행할때 호출된다.
+실제 인코딩 변경은 listType push 함수에 이루어진다.
+
+void listTypePush(robj *subject, robj *value, int where) { // 1
+    listTypeTryConversion(subject, value); // 2
+    
+    if(subject->encoding == REDIS_ENCODING_ZIPLIST 
+        && ziplistLen(subject->ptr) >= server.list_max_ziplist_entries) { 
+            // 3 list-max-ziplist-entires 값설정 redis.conf 파일 사용
+       listTypeConvert(subject, REDIS_ENCODING_LINKEDLIST);  
+       // 4 리스트 객체의 인코딩을 REDIS_ENCODING_LINKEDLIST로 변환한다.
+    }
+
+    if(subject->encoding == REDIS_ENCODING_ZIPLIST) { 
+        // 5 REDIS_ENCODING_ZIPLIST 인코딩을 가진 리스트 객체에 입력된 데이터를 저장
+        int pos = (where == REDIS_HEAD) ? ZIPLIST_HEAD : ZIPLIST_TAIL;
+        value = getDecodeObject(value);
+        subject->ptr = zlilistPush(subject->ptr, value->ptr, sdslen(value->ptr), pos);
+        decrRefCount(value);
+    } else if(subject->encoding == REDIS_ENCODING_LINKEDLIST) { 
+        // 6 REDIS_ENCODING_LINKEDLIST 인코딩을 가진 리스트 객체에 입력된 데이터를 저장
+
+        if(where == REDIS_HEAD) {
+            listAddNodeHead(subject->ptr, value);
+        } else {
+            listAddNodeTail(subject->ptr, value);
+        }
+
+        incrRefCount(value);
+    } else {
+        redisPanic("Unkwon list encoding");
+    }
+} 
+
+전체 로직은 두가지 조건을 검사하여 리스트 객체의 인코딩을 선택하게 된다.
+
+첫번째 입력하려는 값이 list-max_ziplist_value 큰지 검사하는 부분이고
+두번째 저장된 요소의 개수가 list_max_ziplist_entries보다 큰지 검사하는 부분
+리스트 객체에 데이터 저장할 때 이 두 조건을 만족하면 REDIS_ENCODING_ZIPLIST
+인코딩 사용하게 된다.
+
+AWS와 같은 클라우드 시스템에서 서비스를 운용하는 상황과 단일 시스템에서 서비스를 운용하는
+상황에서는 동일한 설정읗 하더라도 서로 다른 결과를 보이게 된다.
+이것은 레디스가 단일 스레드로 동작하기 때문에 발생하는 현상으로 볼 수 있다.
+사용 중인 단일 코어 성능이 높으면 상대적으로 더 빠른 성능을 제공한다.
+그러므로 시스템에 따라서 가장 적정한 list-max-ziplist-entires, list-max-ziiplist-value
+설정값은 여러분의 시스템 상황과 서비스 성격에 따라 달라질 수 밖에 없다.
+
+redis는 오픈소스여서 볼수 있는 구문이지만 책 내용이란 현재 오픈소스에 있는 구문이랑
+차이가 상당히 많다 아무래도 오픈소스가 계속 변경되기 때문인거 같다.
+
+셋 데이터 인코딩
+셋 데이터는 O(1) 시간 복잡도를 제공하기 위해서 해시 테이블 구조로 구현되어 있다.
+
+REDIS_ENCODING_INTEST과 REDIS_ENCODING_HT다. REDIS_ENCODING_HT 인코딩은 셋 데이터의
+기본 인코딩이며 REDIS_ENCODING_INTSET은 메모리 절약하기 위한 특별한 인코딩이다.
+
+셋 데이터의 REDIS_ENCODING_INTEST 인코딩은 redis.conf 파일의 set-max-inset-enties 설정에서 지정
+된다. 
+
+127.0.0.1:6379> sadd set:1 150
+(integer) 1
+127.0.0.1:6379> object encoding set:1
+"intset"
+127.0.0.1:6379> sadd set:1 test
+(integer) 1
+127.0.0.1:6379> object encoding set:1
+"hashtable"
+127.0.0.1:6379> srem set:1 test
+(integer) 1
+127.0.0.1:6379> object encoding set:1
+"hashtable"
+127.0.0.1:6379>
+
+
+set:1 저장된 셋의 인코딩을 확인한다 경계조건을 넘지 않았으므로 현재의 인코딩은 intset이다.
+
+문자열 데이터가 추가된 이후 셋 객체의 인코딩은 hashtable로 변경됬다.
+
+현제 셋 데이터에는 숫자만 남아있어 intset 인코딩으로 변경되야 하지만 hashtable로 인코딩되어있다.
+
+셋 데이터의 숫자 데이터를 추가한다.
+
+데이터가 되어도 hashtable로 출력된다.
+
+셋 데이터 인코딩 처리방법은 리스트 데이터 인코딩 처리 방법과 비슷하다. 
+셋 데이터 인코딩을 처리하는 레디스의 함수는 t_add.c파일에 saddCommand 함수에서 처리된다.
+여기서 말하는 인코딩이란 데이터를 저장하는 방법과 그것을 읽어오는 것을 말한다.
+

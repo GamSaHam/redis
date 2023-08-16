@@ -1,0 +1,125 @@
+정렬된 셋 데이터의 접두사는 Z로 시작한다.
+정렬된 셋 데이터 구조는 가중치가 추가되어 있다.
+기본 정렬은 오름차순이다.
+
+정렬된 데이터의 셋 구조는 셋 데이터와 동일하게 2^32-1개의 요소를 저장할 수 있으며
+가중치에 입력할 수 있는 값은 정수 또는 배정밀도 부동소수점이다.
+
+zrevrange
+시간복잡도: O(log(N)+M)
+
+127.0.0.1:6379> zadd sort:test 2 item1
+(integer) 1
+127.0.0.1:6379> zadd sort:test 4 item2
+(integer) 1
+127.0.0.1:6379> zadd sort:test 6 item3
+(integer) 1
+127.0.0.1:6379> zrevrange sort:test 0 -1 withscores
+1) "item3"
+2) "6"
+3) "item2"
+4) "4"
+5) "item1"
+6) "2"
+127.0.0.1:6379>
+
+zincrby
+시간복잡도: O(log(N))
+
+zrank
+시간복잡도: O(log(N))
+
+zrevrank
+시간복잡도: O(log(N))
+
+127.0.0.1:6379> zincrby sort:test -3 item2
+"1"
+127.0.0.1:6379> zrevrange sort:test 0 -1 withscores
+1) "item3"
+2) "6"
+3) "item1"
+4) "2"
+5) "item2"
+6) "1"
+127.0.0.1:6379> zrank sort:test item3
+(integer) 2
+127.0.0.1:6379> zrank sort:test item2
+(integer) 0
+127.0.0.1:6379> zrank sort:test item1
+(integer) 1
+127.0.0.1:6379> zrevrank sort:test item3
+(integer) 0
+127.0.0.1:6379> zrevrank sort:test item2
+(integer) 2
+127.0.0.1:6379> zrevrank sort:test item1
+(integer) 1
+
+// rev 항목은 내림차순을 의미한다.
+127.0.0.1:6379> zrevrange sort:test 0 1
+1) "item3"
+2) "item1"
+
+가중치가 0 1 까지의 데이터를 가지고 온다.
+
+zrange - z(Sorted Set) range 정렬된 셋의 범위 데이터를 오름차순으로 조회
+zrangebyscore - z(Sorted Set) range by score 정렬된 셋의 점수 범위에 해당하는 데이터 조회
+zremrangebyrank - z(Sorted Set) rem range by rank 정렬된 셋에서 순위에 해당하는 범위의 데이터 제거
+zrevrangebyscore - z(Sorted Set) rem range by score 정렬된 셋에서 가중치에 해당하는 범위의 데이터 제거
+zrevrange - z(Sorted Set) rev range 정렬된 셋의 범위 데이터를 내림차순으로 조회
+
+정렬된 셋 데이터는 주로 실시간 랭킹을 계산하는데 많이 사용된다.
+
+zscore
+주어진 키에 저장된 셋 데이터 중 지정된 요소의 가중치를 조회
+시간복잡도: O(1)
+
+127.0.0.1:6379> zscore sort:test item1
+"2"
+
+127.0.0.1:6379> zrange sort:test 0 2 withscores
+1) "item2"
+2) "1"
+3) "item1"
+4) "2"
+5) "item3"
+6) "6"
+
+127.0.0.1:6379> zrevrangebyscore sort:test 2 0
+1) "item1"
+2) "item2"
+
+// 0~2 번 가중치에 값을 가지고 온다. 
+// 최대 가중치, 최소 가중치
+
+zrevrangebyscore sort:test 50 0 limit 0 1
+
+// limit 을 통해서 50 0 가중치중에서 0번부터 1번까지의 출력 되어진 것을 가지고 온다.
+
+127.0.0.1:6379> zrevrangebyscore key1 (3 1
+1) "treefloat"
+2) "two"
+3) "one"
+
+// ({숫자} 를 넣어주면 미만을 표기하고 기본은 이하이다.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

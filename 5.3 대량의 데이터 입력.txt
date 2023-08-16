@@ -1,0 +1,71 @@
+대량의 데이터를 레디스 서버로 입력하는 방법에 대해 알아본다.
+
+레디스 서버에 대량의 데이터를 입력하는 방법은 총 세가지다.
+1. 레디스 클라이언트 라이브러리를 사용하여 하나씩 순차적으로 데이터를 입력
+2. 레디스 파이프라인을 사용하여 한꺼번에 입력하는 방법
+3. 레디스 스냅샷 파일에 직접 기록하는 방법
+
+1번 방법은 2번 방법에 비해 느리다는 단점이 있다.
+
+레디스 서버가 동작 중에 특정 시점의 레디스 데이터를 디스크에 저장하게 되는데, 이를 스냅샷 파일이라 한다.
+(스냅샷 관련 설정은 redis.conf에서 지정한다.) 이 이후에 레디스 서버를 재시작하면 마지막 스냅샷 시점의 데이터가 로
+드됩다. 즉, 스냅샷 파일에 대량의 데이터를 기록하고 나서 레디스 서버를 재시작해야 적용된다.
+
+이와 같은 이유로 운영 측면에서는 권장되지 않는다.
+
+레디스 서버는 기본적으로 TCP/IP 기반으로 데이터를 처리한다. 
+
+실제 동작은 클라이언트-서버 방식으로 동작한다. 즉 하나의 클라이언트에서 첫 번째 요청에 대한
+처리가 완료되기 전에는 다음 요청을 처리하지 못한다.
+
+클라이언트 입장에서 네트워크를 통해 레디스 서버로 데이터를 전송하고 수신하는 시간은 실제 데이터를 처리하는 시간에 
+포함된다.
+이를 네트워크 왕복 시간(Round Trip Time) 이라고 하며 RTT라고 표기한다.
+두개는 순차적으로 전송하는 상황을 표현한 그림이다.
+
+명령어 하나에 11밀리초가 걸리면 천만건의 데이터를 처리하면 약 30시간 정도가 소모된다.
+
+package org.example;
+
+import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPool;
+
+public class Main {
+    private static final int TOTAL_OP = 10000;
+    public static void main(String[] args) {
+        JedisPool pool = new JedisPool("127.0.0.1", 6379);
+        Jedis jedis = pool.getResource();
+        String key;
+        String value;
+
+        long start = now();
+
+        for (int i = 0; i <= TOTAL_OP; i++) {
+            key = value = "key" + i;
+            jedis.set(key, value);
+        }
+
+        long elapsed = now() - start;
+
+        System.out.println("초당 처리건수" + TOTAL_OP / elapsed * 1000f);
+        System.out.println("소요시간" + elapsed / 1000f + "초");
+
+        jedis.disconnect();
+    }
+    public static long now() {
+        return System.currentTimeMillis();
+    }
+}
+
+초당 처리건수14000.0
+소요시간0.674초
+
+스래드를 증가 시킨다고 해서 성능이 향상되는건 아니다. 즉 다중 스레드에 대한 임계치가 존재한다.
+
+그러므로 각 명령을 처리하는 시간에 네트워크 왕복 시간이 포함되어 상대적으로 많은 시간이 소요된다.
+2.5절에 레디스 성능 측정 명령은 원격 서버가 아닌 레디스가 설치된 서버에서 실행되었다. 그렇기
+때문에 왕복시간이 거의 들지 않아 빠른 처리 시간을 보인 것이다.
+
+
+
+

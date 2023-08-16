@@ -1,0 +1,180 @@
+
+초당 수만 번 이상의 요청을 안정적으로 처리하려면 사용 환경에 따른 레디스 튜닝 포인트를 알아야 한다.
+
+레디스의 튜닝 포인트 중의 하나인 레디스의 설정 파일에 대해여 알아본다.
+
+레디스 설정 파일의 내용 중에서 데이터 손실 방지를 위한 영구 저장소와 관련된 내용을 포함한다.
+
+레디스의 환경 설정과 운영체제 간의 관계에 대해 이해야해 한다.
+
+예를 들어 레디스를 단순 캐시 시스템으로 사용할 때는 지정된 데이터를 유지하기 위한 영구 저장소를 사용하지 않는 것이
+
+성능 향상에 도움이 된다.
+
+- 레디스의 환경 설정 - redis.conf
+- 레디스 스냅샵 - RDB
+- Append Only File = AOF
+- 각 설정에 따른 장담점
+
+10.1 환경 설정 파일
+1. redis.conf 환경 설정 파일을 사용하여 레디스 프로세스가 시작할 때 읽혀지는 방법이다.
+2. config set 레디스 명령을 사용하여 실시간으로 설정값을 반영하는 방법이다.
+
+설정파일은 레디스를 시작할 때 사용하는 redis 명령행 인자로 지정된다. 그러므로 설정 파일의 내용을 수정하고 레디스에 적용할려면 레디스
+
+인스턴스를 재시작해야 한다. 동작 중인 레디스를 재시작하지 않고 설정을 즉시 반영하고 싶다면 config set 명령을 사용하자
+
+기본 설정 파일의 이름은 redis.conf인데 8장에서 알아본 클러스터 설정과 같이 필요에 따라서 다른 이름의 설정 파일을 지정할 수 있다.
+
+
+############ 기본 설정 ##############
+daemonize no
+pidfile /var/run/redis.pid
+port 6379
+bind 127.0.0.1
+unixsocket /tmp/redis.sock
+unixsocketperm 755
+timeout 0
+tcp-keepalive 0
+loglevel notice
+logfile stdout
+syslog-enabled no
+syslog-ident redis
+syslog-facility local0
+databases 16
+
+
+############ 영구 저장소 설정 ############
+save 900 1
+save 300 10
+save 60 10000
+stop-writes-on-bgsave-error yes
+rdbcompession yes
+rdbchecksum yes
+dbfilename dump.rdb
+dir ./
+
+############ 복제 설정 ############
+slaveof <masterip> <masterport>
+masterauth <master-password>
+slave-serve-stale-data yes
+slave-read-only yes
+repl-ping-slave-period 10
+repl-timeout 60
+repl-disable-tcp-nodelay no
+slave-priority 100
+
+############ 보안 설정 ############
+requirepass foobared
+rename-command CONFIG ""
+
+############ 제한 설정 ############
+maxclients 10000
+maxmemory <bytes>
+maxmemory-policy volatile-lru
+maxmemory-samples 3
+
+############ AOF 설정 ############
+appendonly no
+appendfilename appendonly.aof
+appendfsync everysec
+no-appendfsync-on-rewrite no
+auto-aof-rewrite-percentage 100
+auto-aof-rewrite-min-size 64mb
+
+############ AOF 설정 ############
+appendonly no
+appendfilename appendonly.aof
+appendfsync everysec
+no-appendfsync-on-rewrite no
+auto-aof-rewrite-percentage 100
+auto-aof-rewrite-min-size 64mb
+
+############ 루아 설정 ############
+lua-time-limit 5000
+
+############ 슬로우 쿼리 설정 ############
+slowlog-log-slower than 10000
+showlog-max-len 128
+
+############ 고급 설정 ############
+hash-max-ziplist-entries 512
+hash-max-ziplist-value 64
+list-max-ziplist-entries 512
+list-max-ziplist-value 64
+set-max-intset-entries 512
+zset-max-ziplist-entries 128
+zset-max-ziplist-value 64
+activerehashing yes
+client-output-buffer-limit normal 0 0 0
+client-output-buffer-limit slave 256mb 64mb 60
+client-output-buffer-limit pubsub 32mb 8mb 60
+hz 10
+
+redis.conf 파일에는 [예제 10-1]과 같이 약 60개의 설정이 있다.
+각 설정에서 메모리의 크기를 지저아는 단위는 k, kb, m, mb, g, gb와 표시하는데, 단위의 대소문자는 구분하지 않는다.
+k는 1,000을 1024를 나태넨다 1Mb 와 1mB 모두 1024 * 1024와 동일한 값이다.
+
+레디스의 가장 기본적인 설정으로서 네트워크, 로그 및 프로세스와 관련된 설정값을 지정한다.
+
+port 인스턴스가 사용할 서비스 포트를 지정한다.
+
+bind 인스턴스가 사용할 네트워크 어뎁터를 지정한다.
+
+통상적인 기업용 서비스 환경에서는 하나의 하드웨어에 여러 개의 네트워크 카드를 설치하여 용도별로
+
+분리하여 사용한다. 
+
+1. 웹 서버로부터 요청 받기 위한 회선
+2. NAS를 사용하기 위한 회선
+3. 서비스 관리 전용 네트워크와 같이 용도에 따라서 별도의 네트워크 어뎁터 사용
+
+다중 네트워크
+서버
+> LAN1(192.168.52.102), LAN2(10.24.0.102), LAN3(192.168.12.102)
+[그림 10-1]
+
+[그림 10-1] 과 같은 환경에서 네트워크 3을 통한 요청을 수신하려면 bind 설정에 특정 IP을 지정하자
+bind 192.168.12.102
+
+timeout 클라이언트에서 대기시간을 설정 
+timeout으로 지정된 시간동안 데이터의 송수신이 발생하지 않으면 해당 클라이언트의 연결을 끊는다.
+0또는 양수이며 음수가 설정되면 '설정 파일 오류' 라는 메시지를 출력하고 레디스 인스턴스가 시작되지 않는다.
+
+loglevel
+레디스 인스턴스가 동작 중에 출력하는 로그의 레벨을 지정한다.
+
+logfile
+로그가 저장되는 경로와 파일명을 지정한다. 로그 파일의 기본값은 리눅스의 표준 출력인 stdout이 사용되는데,
+로그를 파일로 저장하기 위해서는 logfile 설정에 물리적인 파일의 이름을 지정한다.
+
+logfile ./log/redis-master.log
+
+databases
+레디스는 database라는 이름의 논리적으로 분리된 데이터 저장공간을 제공한다.
+
+redis
+database0 <- 클라이언트, 클라이언트
+database1 
+database2 <- 클라이언트
+database3 <- 클라이언트
+...
+[그림 10-2]
+
+레디스의 database는 [그림 10-2]와 같이 논리적인 저장공간을 의미하여 숫자 인덱스를 사용하여 구분한다.
+각 클라이언트 연결이 사용할 database를 지정하기 위해서 select 명령을 사용하며 데이터의 저장과 조회는
+선택된 database에서 처리한다. 만약 databases 설정을 지정하지 않으면 기본값인 16이 지정된다.
+즉, 16개의 분리된 데이터 저장공간을 사용할수 있다.
+
+
+
+
+
+
+
+
+
+
+
+
+

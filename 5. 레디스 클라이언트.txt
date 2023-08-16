@@ -1,0 +1,76 @@
+
+레디스 클라이언트에 대해서 알아보자. 레디스 데이터를 저장하고 조회하는 방법에는 3가지가 있다.
+
+1. 레디스 명령행 클라이언트를 사용하는 방법
+2. 레디스 프로토콜을 사용하여 작성된 클라이언트 라이브러리를 사용
+   즉, HTTP프로토콜로 아파치 HTTP 클라이언트 라이브러리를 만들 듯이 레디스 프로토콜로 라이브러리를 
+   작성하는 방법이다.
+3. Webdis 또는 Mod_redis 같은 플러그인을 사용하는 방법이다.
+
+레디스 명령행 클라이언트에 대한 사용법은 이전 장에서 알아보았으며, 서드파티 플로그인에 대한 설명은
+이책의 범위를 넘어선다.
+
+이제부터 두 번째 방법인 레디스 프로토콜을 사용하여 작성된 클라이언트를 알아보고
+자바 클라이언트 라이브러리를 사용하여 레디스를 사용하는 방법을 알아보자
+자바 라이브러리인 제디스(Jedis)를 사용한다.
+
+이장의 내용
+- 레디스 클라이언트 종류
+- 레디스 클라이언트 라이브러리
+- 레디스 프로토콜의 구조
+- 대량 데이터 입력 처리
+
+(레디스서버 > 레디스 프로토콜 서버) <=>(레디스 프로토콜) 자바 어플리케이션
+
+레디스는 여타 NoSQL에서 지원하는 REST, HTTP 와 같은 범용 프로토콜을 자체적으로 지원하지 않는다.
+레디스는 이미 매우 많은 종류의 프로그래밍 언어로 만들어진 레디스 클라이언트 라이브러리가 존재한다.
+
+package org.example;
+
+import redis.clients.jedis.Jedis;
+
+public class Main {
+    public static void main(String[] args) {
+        Jedis jedis = new Jedis("127.0.0.1", 6379);
+        
+        String result = jedis.set("redisbook", "Hello redis!");
+
+        System.out.println(result);
+        System.out.println(jedis.get("redisbook"));
+    }
+}
+
+Config config = new Config();
+config.maxActive = 20; // ObjectPool에 최대 개수를 설정한다.
+config.whenExhaustedAction = GenericObjectPool.WHEN_EXHAUSTED_BLOCK;
+// 등록된 연결이 설정한 최대 개수에 도달했을 때, 새로운 요청에 대한 처리 방법을 지정한다.
+// 여기서는 가용 연결이 생길 때까지 대기하도록 설정했다.
+
+JedisPool pool = new JedisPool(config, "127.0.0.1", 6379); // config 설정을 활용하여 제디스를 연결풀 생성
+Jedis firstClient = pool.getResource(); // 첫번째 커넥션을 가지고 온다.
+firstClient.hset("info:key1", "이름", "자린고비");
+firstClient.hset("info:key1", "생일", "1970-12-20");
+
+Jedis secondClient = pool.getResource(); // 두번째 커넥션을 가지고 온다.
+
+Map<String, String> result = secondClient.hgetAll("info:key1");
+System.out.println("이름:" + result.get("이름"));
+System.out.println("생일:" + result.get("생일"));
+
+pool.returnResource(firstClient); // 첫번째 풀을 돌려준다.
+pool.returnResource(secondClient); // 두번째 풀을 돌려준다.
+pool.destroy();
+
+// 보통 연결풀은 전역 상수(static final 상수)에 등록하여 사용한다.
+
+이름:자린고비
+생일:1970-12-20
+
+PS C:\Users\함감사> redis-cli --raw hgetall info:key1
+이름
+자린고비
+생일
+1970-12-20
+
+
+

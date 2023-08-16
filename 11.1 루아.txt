@@ -1,0 +1,102 @@
+루아는 다른 언어에 이식하기 좋은 스크립트 언어 이다. 대소문자를 비교한다.
+
+루아 스크립트는 매우 강력한 문자열 조작함수와 수학 함수들을 가지고 있으며 
+
+그리픽 시뮬레이션을 위한 스크립트 언어로 개발되었기 때문에 타 스크립트 언어에 비하여 빠른 성능을 제공한다.
+
+루아 스크립트는 자바 언어와 유사한 가비지 컬렉션을 지원한다.  
+
+가비지 컬렉션의 대상으로 만들고 싶다면 변수에 nil을 할당하면 된다.
+
+
+
+local function variable()
+    local name = "kris"
+    local variable1, variable2 = 15, "test string"
+    local book = "redis" price = 35000
+    print(name)
+    print(variable1,variable2, book)
+    print(new_name)
+
+end
+-- variable()
+
+local function myFunction()
+    local localval1 = 100
+
+    local function inner()
+        local localval1 = 10
+        return localval1
+    end
+
+    print(inner())
+    print(localval1)
+    print(localval2)
+
+    return localval1
+end
+
+-- myFunction()
+
+
+-- 동일한 이름을 가지지만 변수의 스코프가 다르므로 별개의 변수로 인식된다.
+
+local function condition(size, flag)
+    local result = 'This is string'
+    local filter = nil
+
+    if flag == 0 then
+        filter = ' zero'
+    elseif flag == 1 then
+        filter = ' one'
+    else
+        filter = ' none'
+    end
+   
+    for idx = 1, size, 1 do
+        result = result .. filter
+    end
+
+    return result
+end
+
+-- print(condition(3))
+-- print(condition(1, 0))
+-- print(condition(2, 1))
+local function main()
+    local table1 = {}
+    table1["kris"] = 100
+    table1["niki"] = 1002
+    table1["james"] = 200
+
+    print(table1.kris)
+end
+
+-- main()
+
+local function maxn(table1)
+    max = 0;
+    for key, value in pairs(table1) do
+        if table1[key] > max then
+            max = table1[key]
+        end 
+
+    end
+
+    return max
+end
+
+local function tableSize()
+    local table1= {}
+
+    table1['kris'] = 100
+    table1['niki'] = 1002
+    table1['james'] = 200
+    print("table1의 크기", maxn(table1));
+
+    local table2 = {100, 1002, 200}
+    print("table2의 크기", maxn(table2))
+end
+
+tableSize()
+

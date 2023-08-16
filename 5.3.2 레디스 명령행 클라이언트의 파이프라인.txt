@@ -1,0 +1,156 @@
+레디스 명령행 클라이언트에서 파이프라인을 사용하려면 데이터가 저장된 파일이 필요하다.
+이 텍스트 파일은 두 가지 구조를 가질 수 있다.
+
+1. 순수한 레디스 명령 집합으로 이루어진 텍스트 파일
+2. 두 번째는 5.2절에서 설명한 레디스 프로토콜로 이루어진 텍스트 파일
+
+레디스 명령구조 데이터 파일
+
+set key1 data1
+set key2 data2
+set key3 data3
+
+레디스 프로토콜 구조 데이터 파일
+
+...
+*3
+$3
+set
+$4
+key1
+$5
+data1
+*3
+$3
+set
+$4
+key2
+$5
+data2
+...
+
+
+class PipelineData {
+    private BufferedWriter writer;
+    private String fileNamePrefix = "./redis_data";
+    private String fileNamePostfix = ".txt";
+
+    private final int TOTAL_NUMBER_OF_COMMAND = 10;
+
+    public void makeDataFileAsCommand() throws IOException {
+        String fileName = fileNamePrefix + "_command" + fileNamePostfix;
+        writer = new BufferedWriter(new FileWriter(fileName));
+
+        String key,value;
+        for (int i = 0; i < TOTAL_NUMBER_OF_COMMAND; i++) {
+            key = "key" + (TOTAL_NUMBER_OF_COMMAND + i);
+            value = "data" + (TOTAL_NUMBER_OF_COMMAND + i);
+            writer.write("set " + key + " " + value + "\r\n");
+        }
+
+        writer.flush();
+        writer.close();
+    }
+
+    public void makeDataFileAsProtocol() throws IOException {
+        String fileName = fileNamePrefix + "_protocol" + fileNamePostfix;
+        writer = new BufferedWriter(new FileWriter(fileName));
+
+        String key,value;
+
+        for (int i = 0; i < TOTAL_NUMBER_OF_COMMAND; i++) {
+            key = "key" + (TOTAL_NUMBER_OF_COMMAND + i);
+            value = "data" + (TOTAL_NUMBER_OF_COMMAND + i);
+
+            writer.write("*3\r\n");
+            writer.write("$3\r\n");
+            writer.write("set\r\n");
+            writer.write("$" + key.length() + "\r\n");
+            writer.write(key + "\r\n");
+            writer.write("$" + value.length() + "\r\n");
+            writer.write(value+ "\r\n");
+        }
+
+        writer.flush();
+        writer.close();
+
+    }
+}
+
+public class Main {
+    public static void main(String[] args) throws IOException {
+        PipelineData data = new PipelineData();
+
+        data.makeDataFileAsProtocol();
+        data.makeDataFileAsCommand();
+    }
+}
+cat redis_data_command.txt | redis-cli --pipe
+
+10만건에 데이터를 저장하는데 53초 걸렸다. 총 5회 테스트 실시한 결과 평균적으로 55초가 걸렸다.
+초당 18만 건의 데이터가 레디스에 입력됬다.
+제디스 클라이언트를 사용한 결과에 비하여 놀라운 성능의 향상을 보이고 있다.
+2.5절에서 테스트한 레디스 밴치마크 도구보다 빠르다.
+
+cat redis_data_protocol.txt | redis-cli --pipe
+
+10만건의 결과 45초의 수행 시간을 보였다.
+초당 약 22만건의 데이터가 레디스에 입력됐다.
+파일을 사용했을 때보다 20% 정도의 성능 향상을 보이고 있다.
+
+레디스 프로토콜 형식이 아니면 프로토콜 형태의 구조로 변환하는 작업이 이루어지기 때문이다.
+
+하지만 두개 다 속도가 빠른만큼 상황에 따라서 작당한 방법을 선택하자.
+
+5.3.3 제디스와 파이프라인
+
+private final static int TOTAL_OPERATIONS = 100;
+
+public static void main(String[] args) throws IOException {
+    Jedis jedis = new Jedis("127.0.0.1", 6379);
+    jedis.connect();
+
+    long start = System.currentTimeMillis();
+
+    String key, value;
+    Pipeline p = jedis.pipelined();
+
+    for (int i = 0; i < TOTAL_OPERATIONS; i++) {
+        key = "key" + (TOTAL_OPERATIONS + i);
+        value = "data" + (TOTAL_OPERATIONS + i);
+
+        p.set(key, value);
+    }
+
+    p.sync();
+
+    jedis.disconnect();
+
+    long elapsed =  System.currentTimeMillis() - start;
+
+    System.out.println("초당 처리 건수" + TOTAL_OPERATIONS / elapsed * 1000f); // 단위가 밀리여서 1000을 곱함
+    System.out.println("소요시간" + elapsed / 1000f + "초");
+
+}
+
+초당 처리 건수5000.0
+소요시간0.017초
+
+책에서는 초당 16만 건의 요청을 처리했고 레디스 명령행 클라이언트의 파이프라인 수행 시간과 크게 다르지 않은 결과를
+보여준다.
+레디스 프로토콜 형식의 파일과 동일한 요청을 생성하여 레디스 서버로 전송하기 때문에 레디스 명령행
+클라이언트의 redis_data_protocol.txt 파일을 파이프라인으로 실행한 결과와 유사한 처리 시간을 보인다.
+
+마치며
+레디스 클라이언트의 종류와 레디스 프로토콜 구조에 대하여 알아보았다.
+대량의 데이터를 입력하는 방법도 알아보았다. 레디스 운영 중에 대량의 데이터
+입력을 처리하는 방법은 때때로 유용하게 사용되니, 꼭 숙지해 두자.
+
+파이프라인을 운영 중인 시스템에 사용하면 파이프라인 명령이 레디스의 모든 리소스를
+점유하게 되어 응답 속도가 저하되기도 한다. 이럴 때는 제디스 같은 클라이언트 라이브러리를 사용하여 데이터를 입력하는 편이 더 낫다.
+
+
+
+
+
+
